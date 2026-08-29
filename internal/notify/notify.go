@@ -1,6 +1,7 @@
 package notify
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/awydd/nudge/conf"
@@ -11,6 +12,10 @@ type Notify interface {
 }
 
 func CheckAndNotify(a *conf.Anniversary, factory func(title, desc, date string, years int) Notify) (bool, error) {
+	if !a.Channel.Valid() {
+		return false, fmt.Errorf("无效的通知通道类型: %s", a.Channel)
+	}
+
 	origTime, err := time.Parse(time.DateOnly, a.OriginalDate)
 	if err != nil {
 		return false, err

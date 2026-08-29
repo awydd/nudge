@@ -1,4 +1,4 @@
-package console
+package email
 
 import (
 	"os"
@@ -10,11 +10,21 @@ import (
 	"github.com/awydd/nudge/utils"
 )
 
-func TestConsoleIntegration(t *testing.T) {
+func TestMain(m *testing.M) {
+	rootPath := filepath.Join("../../../")
+	if err := os.Chdir(rootPath); err != nil {
+		panic(err)
+	}
+
+	os.Exit(m.Run())
+}
+
+func TestEmailIntegration(t *testing.T) {
+	conf.Init()
+
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "anniversaries.json")
 
-	// 注册测试结束后的清理回调（选填，t.TempDir() 本身会自动删除）
 	t.Cleanup(func() {
 		t.Logf("正在自动清理临时测试目录: %s", tmpDir)
 	})
@@ -27,12 +37,12 @@ func TestConsoleIntegration(t *testing.T) {
 				Anniversaries: []conf.Anniversary{
 					{
 						ID:               "1",
-						Title:            "nudge",
+						Title:            "nudge-email",
 						Description:      "https://github.com/awydd/nudge",
 						OriginalDate:     "2026-08-29",
 						AdvanceDays:      0,
 						LastNotifiedYear: 0,
-						Channel:          conf.ChannelConsole,
+						Channel:          conf.ChannelEmail,
 					},
 				},
 			}
@@ -53,6 +63,10 @@ func TestConsoleIntegration(t *testing.T) {
 	})
 
 	t.Run("检查并通知", func(t *testing.T) {
+		// 尝试初始化配置（若已有默认配置文件会直接加载）
+		_ = conf.Init()
+		cfg := conf.Get()
+
 		var store conf.Store
 		if err := utils.ReadJSON(dbPath, &store); err != nil {
 			t.Fatalf("读取存储失败: %v", err)
@@ -62,10 +76,13 @@ func TestConsoleIntegration(t *testing.T) {
 		for i := range store.Anniversaries {
 			a := &store.Anniversaries[i]
 
-			triggeredCount := 0
 			triggered, err := notify.CheckAndNotify(a, func(title, desc, date string, years int) notify.Notify {
-				triggeredCount++
-				return &ConsoleNotifier{
+				return &EmailNotifier{
+					SMTPHost:    cfg.Email.SMTPHost,
+					SMTPPort:    cfg.Email.SMTPPort,
+					From:        cfg.Email.From,
+					Password:    cfg.Email.Password,
+					To:          cfg.Email.To,
 					Title:       title,
 					Description: desc,
 					Date:        date,
@@ -96,7 +113,12 @@ func TestConsoleIntegration(t *testing.T) {
 		for i := range secondStore.Anniversaries {
 			a := &secondStore.Anniversaries[i]
 			triggered, _ := notify.CheckAndNotify(a, func(title, desc, date string, years int) notify.Notify {
-				return &ConsoleNotifier{
+				return &EmailNotifier{
+					SMTPHost:    cfg.Email.SMTPHost,
+					SMTPPort:    cfg.Email.SMTPPort,
+					From:        cfg.Email.From,
+					Password:    cfg.Email.Password,
+					To:          cfg.Email.To,
 					Title:       title,
 					Description: desc,
 					Date:        date,
