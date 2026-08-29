@@ -1,25 +1,60 @@
 package utils
 
 import (
-	"encoding/json"
+	"bufio"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"os"
+	"path/filepath"
 	"reflect"
 )
 
 var notPointer = errors.New("must be a pointer")
 
 func WriteJSON(path string, val any) error {
-	if !isPointer(val) {
-		return notPointer
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
 	}
 
-	data, err := json.MarshalIndent(val, "", "  ")
+	tmpFile, err := os.CreateTemp(dir, "json-tmp-*")
 	if err != nil {
 		return err
 	}
 
-	return os.WriteFile(path, data, 0644)
+	tmpName := tmpFile.Name()
+	var success bool
+	defer func() {
+		_ = tmpFile.Close()
+		if !success {
+			_ = os.Remove(tmpName)
+		}
+	}()
+
+	bufWriter := bufio.NewWriter(tmpFile)
+	if err := json.MarshalWrite(bufWriter, val, jsontext.WithIndent("  ")); err != nil {
+		return err
+	}
+
+	if err := bufWriter.Flush(); err != nil {
+		return err
+	}
+
+	if err := tmpFile.Sync(); err != nil {
+		return err
+	}
+
+	if err := tmpFile.Close(); err != nil {
+		return err
+	}
+
+	if err := os.Rename(tmpName, path); err != nil {
+		return err
+	}
+
+	success = true
+	return nil
 }
 
 func ReadJSON(path string, data any) error {
@@ -29,9 +64,6 @@ func ReadJSON(path string, data any) error {
 
 	fileData, err := os.ReadFile(path)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return err
-		}
 		return err
 	}
 
